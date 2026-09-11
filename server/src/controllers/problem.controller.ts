@@ -1,17 +1,12 @@
 import { Request, Response } from "express";
-import mongoose from "mongoose";
-import { Problem } from "../models/Problem";
+import { getAllProblems, getProblemById } from "../services/problem.service";
 
 export const getProblems = async (
   _req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    const problems = await Problem.find()
-      .select(
-        "title slug description difficulty requirements entities evaluationCriteria",
-      )
-      .sort({ createdAt: -1 });
+    const problems = await getAllProblems();
 
     res.status(200).json({
       success: true,
@@ -28,22 +23,12 @@ export const getProblems = async (
   }
 };
 
-export const getProblemById = async (
+export const getProblemByIdController = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    const { id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid problem ID",
-      });
-      return;
-    }
-
-    const problem = await Problem.findById(id);
+    const problem = await getProblemById(req.params.id as string);
 
     if (!problem) {
       res.status(404).json({
@@ -58,6 +43,14 @@ export const getProblemById = async (
       problem,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === "INVALID_PROBLEM_ID") {
+      res.status(400).json({
+        success: false,
+        message: "Invalid problem ID",
+      });
+      return;
+    }
+
     console.error("Get problem error:", error);
 
     res.status(500).json({
