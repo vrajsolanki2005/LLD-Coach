@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Navbar from "./components/Navbar/Navbar";
+import Footer from "./components/Footer/Footer";
 import ProtectedRoute from "./components/ProblemCard/ProtectedRoute";
 import PracticeWorkspace from "./pages/PracticeWorkspace";
 import Problems from "./pages/Problems";
@@ -27,6 +28,8 @@ function App() {
           <Route path="/attempts/:id" element={<PracticeWorkspace />} />
         </Route>
       </Routes>
+
+      <Footer />
     </BrowserRouter>
   );
 }
