@@ -70,9 +70,9 @@ export const AuthProvider = ({
       password,
     });
 
-    localStorage.setItem("token", response.data.token);
+    localStorage.setItem("token", response.data.data.token);
 
-    setUser(response.data.user);
+    setUser(response.data.data.user);
   };
 
   const register = async (
@@ -86,9 +86,9 @@ export const AuthProvider = ({
       password,
     });
 
-    localStorage.setItem("token", response.data.token);
+    localStorage.setItem("token", response.data.data.token);
 
-    setUser(response.data.user);
+    setUser(response.data.data.user);
   };
 
   const logout = () => {
