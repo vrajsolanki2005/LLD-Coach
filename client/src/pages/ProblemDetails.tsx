@@ -40,9 +40,9 @@ const ProblemDetails = () => {
       const attempt = response.data.attempt;
 
       navigate(`/attempts/${attempt._id}`);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("You must be logged in to start an attempt.");
+      setError(err?.response?.data?.message || "Failed to start attempt.");
     } finally {
       setStarting(false);
     }

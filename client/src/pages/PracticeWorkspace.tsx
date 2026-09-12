@@ -58,6 +58,16 @@ const PracticeWorkspace = () => {
     ]);
   };
 
+  const completionPercentage = Math.min(
+    100,
+    Math.round(
+      (classes.length > 0 ? 25 : 0) +
+        (relationships.length > 0 ? 25 : 0) +
+        (explanation.trim().length >= 100 ? 25 : 0) +
+        (code?.trim().length ? 25 : 0),
+    ),
+  );
+
   const removeClass = (index: number) => {
     setClasses(classes.filter((_, classIndex) => classIndex !== index));
   };
@@ -221,6 +231,21 @@ const PracticeWorkspace = () => {
           </span>
 
           <h1>{problem.title}</h1>
+        </div>
+        <div className="progress-card">
+          <div className="progress-header">
+            <span>Design progress</span>
+            <strong>{completionPercentage}%</strong>
+          </div>
+
+          <div className="progress-bar">
+            <div
+              className="progress-fill"
+              style={{
+                width: `${completionPercentage}%`,
+              }}
+            />
+          </div>
         </div>
 
         <div className="workspace-actions">

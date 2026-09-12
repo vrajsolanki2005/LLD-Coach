@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { getMyAttempts, retryAttempt } from "../services/attempt.service";
 
-import { Attempt } from "../types";
+import type { Attempt } from "../types";
 
 const AttemptHistory = () => {
   const navigate = useNavigate();

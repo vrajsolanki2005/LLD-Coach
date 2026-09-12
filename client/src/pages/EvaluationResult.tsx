@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import {
-  getAttemptEvaluation,
-  EvaluationResponse,
-} from "../services/evaluation.service";
+import { getAttemptEvaluation } from "../services/evaluation.service";
+import type { EvaluationResponse } from "../services/evaluation.service";
 
 const EvaluationResult = () => {
   const { id } = useParams<{ id: string }>();

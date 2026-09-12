@@ -1,5 +1,5 @@
 import api from "./api";
-import type { Attempt } from "../types";
+import type { Attempt } from "../types/index";
 
 export const getAttempt = async (attemptId: string): Promise<Attempt> => {
   const response = await api.get(`/attempts/${attemptId}`);
