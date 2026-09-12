@@ -13,9 +13,27 @@ import { errorHandler } from "./middleware/error.middleware";
 
 const app = express();
 
+const allowedOrigins = new Set([
+  process.env.CLIENT_URL || "http://localhost:5173",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+]);
+
 app.use(helmet());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
-app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:5173", credentials: true }));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("CORS_ORIGIN_NOT_ALLOWED"));
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json());
 
 app.use("/api/auth", rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }), authRoutes);
