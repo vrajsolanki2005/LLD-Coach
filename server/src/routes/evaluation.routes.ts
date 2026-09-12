@@ -1,15 +1,10 @@
 import { Router } from "express";
-import {
-	getAttemptEvaluation,
-	getEvaluation,
-	submitEvaluation,
-} from "../controllers/evaluation.controller";
+import { getAttemptEvaluation, retryAttemptEvaluation } from "../controllers/evaluation.controller";
 import { authenticate } from "../middleware/auth.middleware";
 
 const router = Router();
 
-router.get("/attempt/:id", authenticate, getAttemptEvaluation);
-router.get("/:submissionId", authenticate, getEvaluation);
-router.post("/:submissionId", authenticate, submitEvaluation);
+router.get("/:id", authenticate, getAttemptEvaluation);
+router.post("/:id/retry", authenticate, retryAttemptEvaluation);
 
 export default router;

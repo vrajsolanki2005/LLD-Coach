@@ -1,284 +1,399 @@
-import type {
-  EvaluationIssue,
-  EvaluationResult,
-  Evaluator,
-} from "./evaluator.interface";
-import type { IProblem } from "../models/Problem";
-import type { ISubmission } from "../models/Submission";
+import { Evaluator, EvaluationResult } from "./evaluator.interface";
+import { IProblem } from "../models/Problem";
+import { ISubmission } from "../models/Submission";
 
-const normalize = (value: string): string => {
-  return value.toLowerCase().replace(/[\s_-]/g, "");
+const normalize = (value: string): string =>
+  value.toLowerCase().replace(/[\s_-]/g, "");
+
+const containsKeyword = (text: string, keywords: string[]): boolean => {
+  const normalizedText = text.toLowerCase();
+
+  return keywords.some((keyword) =>
+    normalizedText.includes(keyword.toLowerCase()),
+  );
 };
 
-const roundScore = (score: number): number => Math.round(score * 10) / 10;
+const clamp = (value: number): number =>
+  Math.max(0, Math.min(10, Math.round(value * 10) / 10));
 
 export class RuleBasedEvaluator implements Evaluator {
-  id = "rule-based-v1";
+  id = "rule-based-v2";
 
   async evaluate(
     problem: IProblem,
     submission: ISubmission,
   ): Promise<EvaluationResult> {
-    const issues: EvaluationIssue[] = [];
-    const strengths: string[] = [];
-    const suggestedImprovements: string[] = [];
-    const classNames = submission.classes.map((item) => item.name);
+    const classes = submission.classes || [];
+    const relationships = submission.relationships || [];
+
+    const classNames = classes.map((item) => item.name);
+
     const normalizedClassNames = classNames.map(normalize);
 
-    let matchedEntities = 0;
-    for (const entity of problem.entities) {
-      const normalizedEntity = normalize(entity);
-      const matched = normalizedClassNames.some(
-        (className) =>
-          className === normalizedEntity ||
-          className.includes(normalizedEntity) ||
-          normalizedEntity.includes(className),
-      );
+    const allMethods = classes.flatMap((item) => item.methods || []);
 
-      if (matched) {
-        matchedEntities++;
+    const designText = [
+      ...classNames,
+      ...classes.map((item) => item.responsibility),
+      ...allMethods,
+      ...relationships.map((item) => `${item.from} ${item.to} ${item.type}`),
+      submission.explanation || "",
+      submission.code || "",
+    ].join(" ");
+
+    const issues: EvaluationResult["issues"] = [];
+    const strengths: string[] = [];
+    const tradeoffs: string[] = [];
+    const suggestedImprovements: string[] = [];
+
+    
+    const requiredEntities =
+      problem.evaluationConfig?.requiredEntities || problem.entities || [];
+
+    const recommendedEntities =
+      problem.evaluationConfig?.recommendedEntities || [];
+
+    const missingRequiredEntities = requiredEntities.filter(
+      (entity) => !normalizedClassNames.includes(normalize(entity)),
+    );
+
+    const matchedRecommendedEntities = recommendedEntities.filter((entity) =>
+      normalizedClassNames.includes(normalize(entity)),
+    );
+
+    if (missingRequiredEntities.length > 0) {
+      issues.push({
+        severity: "high",
+        title: "Missing core design entities",
+        explanation: `Your design does not explicitly represent: ${missingRequiredEntities.join(
+          ", ",
+        )}. These concepts are important for the stated problem.`,
+        suggestion:
+          "Consider introducing classes for these concepts and give each one a focused responsibility.",
+      });
+    } else {
+      strengths.push(
+        "The design represents the core entities expected for this problem.",
+      );
+    }
+
+    
+    const classesWithoutResponsibilities = classes.filter(
+      (item) => !item.responsibility?.trim(),
+    );
+
+    if (classesWithoutResponsibilities.length > 0) {
+      issues.push({
+        severity: "high",
+        title: "Classes without clear responsibilities",
+        explanation: `The following classes do not clearly explain what they own or do: ${classesWithoutResponsibilities
+          .map((item) => item.name)
+          .join(", ")}.`,
+        suggestion:
+          "Give every class one clear responsibility related to the problem domain.",
+      });
+    }
+
+    const godClasses = classes.filter(
+      (item) =>
+        (item.methods?.length || 0) > 8 || item.responsibility.length > 300,
+    );
+
+    if (godClasses.length > 0) {
+      issues.push({
+        severity: "medium",
+        title: "Possible god class",
+        explanation: `These classes appear to have too many responsibilities or operations: ${godClasses
+          .map((item) => item.name)
+          .join(", ")}.`,
+        suggestion:
+          "Consider extracting domain services or collaborating classes so responsibilities remain focused.",
+      });
+    } else if (classes.length > 1) {
+      strengths.push(
+        "Responsibilities are reasonably distributed across multiple classes.",
+      );
+    }
+
+   
+    
+    const behaviors = problem.evaluationConfig?.requiredBehaviors || [];
+
+    let coveredBehaviors = 0;
+
+    for (const behavior of behaviors) {
+      const covered = containsKeyword(designText, behavior.keywords);
+
+      if (covered) {
+        coveredBehaviors++;
+
+        strengths.push(
+          `Your design addresses the "${behavior.name}" behavior.`,
+        );
       } else {
         issues.push({
-          severity: "medium",
-          title: `Missing class: ${entity}`,
-          explanation: `The problem identifies "${entity}" as an important domain concept, but no corresponding class was found in the submission.`,
-          suggestion: `Consider introducing a ${entity} class if it represents a meaningful responsibility in your design.`,
+          severity: "high",
+          title: `Missing behavior: ${behavior.name}`,
+          explanation: behavior.description,
+          suggestion: `Add a method, class responsibility, relationship, or explanation showing how "${behavior.name}" is handled.`,
         });
       }
     }
 
+    
+    const classesWithNoMethods = classes.filter(
+      (item) => !item.methods || item.methods.length === 0,
+    );
+
+    if (classesWithNoMethods.length > 0) {
+      issues.push({
+        severity: "medium",
+        title: "Some classes have no methods",
+        explanation: `These classes have no operations defined: ${classesWithNoMethods
+          .map((item) => item.name)
+          .join(", ")}.`,
+        suggestion:
+          "Add the key operations owned by each class. Avoid adding methods just to increase the count.",
+      });
+    }
+
+    if (allMethods.length >= classes.length * 2) {
+      strengths.push(
+        "The design provides meaningful operations instead of only listing data entities.",
+      );
+    }
+
+    
+    const invalidRelationships = relationships.filter(
+      (relationship) =>
+        !classNames.includes(relationship.from) ||
+        !classNames.includes(relationship.to),
+    );
+
+    if (invalidRelationships.length > 0) {
+      issues.push({
+        severity: "high",
+        title: "Invalid relationships",
+        explanation:
+          "Some relationships refer to classes that are not present in the submitted design.",
+        suggestion:
+          "Make sure every relationship connects two classes defined in your design.",
+      });
+    }
+
+    if (relationships.length === 0 && classes.length > 1) {
+      issues.push({
+        severity: "medium",
+        title: "No class relationships defined",
+        explanation:
+          "The submission contains multiple classes but does not explain how they collaborate.",
+        suggestion:
+          "Add associations, composition, aggregation, dependency, or inheritance relationships where appropriate.",
+      });
+    } else if (relationships.length > 0) {
+      strengths.push(
+        "The submission explicitly models collaboration between classes.",
+      );
+    }
+
+    
+    const recommendedConcepts =
+      problem.evaluationConfig?.recommendedConcepts || [];
+
+    const abstractionKeywords = [
+      "interface",
+      "abstract",
+      "strategy",
+      "factory",
+      "polymorphism",
+      "inheritance",
+      "composition",
+    ];
+
+    const abstractionDetected = abstractionKeywords.some((keyword) =>
+      designText.toLowerCase().includes(keyword),
+    );
+
+    if (
+      recommendedConcepts.some((concept) =>
+        abstractionKeywords.some((keyword) =>
+          concept.toLowerCase().includes(keyword),
+        ),
+      ) &&
+      !abstractionDetected
+    ) {
+      issues.push({
+        severity: "low",
+        title: "Abstraction opportunity",
+        explanation:
+          "The problem has areas where abstraction can reduce coupling or make future extensions easier.",
+        suggestion:
+          "Consider interfaces, composition, strategy, factory, or polymorphism where they solve a real design problem. Do not add patterns unnecessarily.",
+      });
+    }
+
+    
+    const explanation = submission.explanation?.trim() || "";
+
+    const reasoningKeywords = [
+      "because",
+      "tradeoff",
+      "scalable",
+      "extensible",
+      "coupling",
+      "cohesion",
+      "responsibility",
+      "interface",
+      "future",
+      "design",
+    ];
+
+    const reasoningSignals = reasoningKeywords.filter((keyword) =>
+      explanation.toLowerCase().includes(keyword),
+    );
+
+    if (explanation.length < 100) {
+      issues.push({
+        severity: "medium",
+        title: "Limited design reasoning",
+        explanation:
+          "The explanation is too short to understand why the design decisions were made.",
+        suggestion:
+          "Explain why responsibilities were assigned this way, how classes collaborate, and at least one important trade-off.",
+      });
+    }
+
+    if (reasoningSignals.length >= 3) {
+      strengths.push(
+        "The explanation discusses design reasoning rather than only listing classes.",
+      );
+    }
+
+    if (
+      explanation.toLowerCase().includes("tradeoff") ||
+      explanation.toLowerCase().includes("trade-off")
+    ) {
+      tradeoffs.push("The submission explicitly discusses a design trade-off.");
+    } else {
+      suggestedImprovements.push(
+        "Explain at least one trade-off you considered and why you selected your final approach.",
+      );
+    }
+
+    
     const completenessScore =
-      problem.entities.length === 0
+      requiredEntities.length === 0
         ? 10
-        : (matchedEntities / problem.entities.length) * 10;
+        : clamp(
+            ((requiredEntities.length - missingRequiredEntities.length) /
+              requiredEntities.length) *
+              10,
+          );
 
-    if (matchedEntities === problem.entities.length) {
-      strengths.push("All major domain entities identified by the problem are represented.");
-    }
-
-    const classesWithResponsibilities = submission.classes.filter(
-      (item) => item.responsibility?.trim().length > 0,
+    const responsibilityScore = clamp(
+      10 - classesWithoutResponsibilities.length * 3 - godClasses.length * 2,
     );
-    const responsibilityScore =
-      submission.classes.length === 0
-        ? 0
-        : (classesWithResponsibilities.length / submission.classes.length) * 10;
 
-    for (const classItem of submission.classes) {
-      if (!classItem.responsibility?.trim()) {
-        issues.push({
-          severity: "high",
-          title: `${classItem.name} has no responsibility`,
-          explanation:
-            "A class without a clearly defined responsibility makes the design harder to understand and can lead to poor separation of concerns.",
-          suggestion:
-            "Describe the primary responsibility of this class in one or two clear sentences.",
-        });
-      }
-    }
+    const behaviorScore =
+      behaviors.length === 0
+        ? 10
+        : clamp((coveredBehaviors / behaviors.length) * 10);
 
-    if (responsibilityScore >= 8) {
-      strengths.push(
-        "Classes have clearly defined responsibilities, which improves separation of concerns.",
-      );
-    } else {
-      suggestedImprovements.push(
-        "Clarify the responsibility of each class and avoid classes that exist without a clear purpose.",
-      );
-    }
+    const relationshipScore =
+      classes.length <= 1
+        ? 10
+        : invalidRelationships.length > 0
+          ? 4
+          : relationships.length === 0
+            ? 5
+            : 9;
 
-    const classesWithMethods = submission.classes.filter(
-      (item) => item.methods && item.methods.length > 0,
-    );
     const methodsScore =
-      submission.classes.length === 0
+      classes.length === 0
         ? 0
-        : (classesWithMethods.length / submission.classes.length) * 10;
+        : clamp(10 - (classesWithNoMethods.length / classes.length) * 6);
 
-    for (const classItem of submission.classes) {
-      if (!classItem.methods || classItem.methods.length === 0) {
-        issues.push({
-          severity: "low",
-          title: `${classItem.name} has no methods`,
-          explanation:
-            "The class has a responsibility but no operations showing how that responsibility would be performed.",
-          suggestion:
-            "Add the important public methods that demonstrate how this class participates in the system.",
-        });
-      }
-    }
-
-    if (methodsScore >= 8) {
-      strengths.push(
-        "Most classes expose meaningful methods that reflect their responsibilities.",
-      );
-    }
-
-    let validRelationships = 0;
-    for (const relationship of submission.relationships) {
-      const fromExists = normalizedClassNames.includes(normalize(relationship.from));
-      const toExists = normalizedClassNames.includes(normalize(relationship.to));
-
-      if (fromExists && toExists) {
-        validRelationships++;
-      } else {
-        issues.push({
-          severity: "high",
-          title: "Invalid relationship",
-          explanation: `The relationship "${relationship.from} -> ${relationship.to}" references a class that does not exist in the submission.`,
-          suggestion:
-            "Make sure both ends of every relationship correspond to classes defined in your design.",
-        });
-      }
-    }
-
-    let relationshipScore = 10;
-    if (submission.classes.length > 1) {
-      if (submission.relationships.length === 0) {
-        relationshipScore = 2;
-        issues.push({
-          severity: "high",
-          title: "No class relationships defined",
-          explanation:
-            "The submission contains multiple classes but does not describe how those classes interact.",
-          suggestion:
-            "Add relationships such as association, aggregation, composition, inheritance, or dependency where appropriate.",
-        });
-      } else {
-        relationshipScore =
-          (validRelationships / submission.relationships.length) * 10;
-      }
-    }
-
-    if (relationshipScore >= 8) {
-      strengths.push(
-        "Class relationships are explicitly represented and reference valid classes.",
-      );
-    }
-
-    const explanationLength = submission.explanation?.trim().length || 0;
-    let explanationScore = 0;
-    if (explanationLength >= 500) explanationScore = 10;
-    else if (explanationLength >= 300) explanationScore = 8;
-    else if (explanationLength >= 150) explanationScore = 6;
-    else if (explanationLength >= 75) explanationScore = 4;
-    else if (explanationLength > 0) explanationScore = 2;
-
-    if (explanationScore >= 8) {
-      strengths.push(
-        "The explanation provides enough detail to understand the reasoning behind the design.",
-      );
-    } else {
-      issues.push({
-        severity: "medium",
-        title: "Design explanation is too brief",
-        explanation:
-          "The class structure alone does not fully explain why responsibilities and relationships were chosen.",
-        suggestion:
-          "Explain your major design decisions, responsibilities, relationships, and important trade-offs.",
-      });
-      suggestedImprovements.push(
-        "Expand the design explanation and justify the most important architectural decisions.",
-      );
-    }
-
-    if (submission.classes.length >= 3) {
-      strengths.push(
-        "The design contains multiple collaborating classes rather than putting most behavior into a single class.",
-      );
-    }
-
-    if (submission.classes.length === 1) {
-      issues.push({
-        severity: "medium",
-        title: "Very small class structure",
-        explanation:
-          "The entire design is represented by a single class, which may indicate that several responsibilities are combined.",
-        suggestion:
-          "Review the requirements and identify whether additional domain classes or services should be introduced.",
-      });
-    }
+    const explanationScore =
+      explanation.length >= 300
+        ? 10
+        : explanation.length >= 200
+          ? 8
+          : explanation.length >= 100
+            ? 6
+            : 3;
 
     const categories = [
       {
-        name: "Completeness",
-        score: roundScore(completenessScore),
+        name: "Design Completeness",
+        score: completenessScore,
         feedback:
-          completenessScore >= 8
-            ? "Most or all important domain entities are represented."
-            : "Several important domain entities are missing from the design.",
+          missingRequiredEntities.length === 0
+            ? "Core domain entities are represented."
+            : `Missing: ${missingRequiredEntities.join(", ")}.`,
       },
       {
         name: "Responsibilities",
-        score: roundScore(responsibilityScore),
+        score: responsibilityScore,
         feedback:
-          responsibilityScore >= 8
-            ? "Responsibilities are clearly assigned to classes."
-            : "Some classes need clearer or more focused responsibilities.",
+          godClasses.length > 0
+            ? "Some classes may contain too many responsibilities."
+            : "Responsibilities are reasonably distributed.",
       },
       {
-        name: "Methods",
-        score: roundScore(methodsScore),
-        feedback:
-          methodsScore >= 8
-            ? "Classes contain methods that represent their behavior."
-            : "Several classes do not yet describe their important behavior.",
+        name: "Requirement Coverage",
+        score: behaviorScore,
+        feedback: `${coveredBehaviors}/${behaviors.length} important behaviors are represented.`,
       },
       {
         name: "Relationships",
-        score: roundScore(relationshipScore),
+        score: relationshipScore,
         feedback:
-          relationshipScore >= 8
-            ? "Class interactions are represented clearly."
-            : "The design needs stronger or more accurate class relationships.",
+          relationships.length > 0
+            ? "The design contains explicit class collaboration."
+            : "Add relationships showing how objects collaborate.",
       },
       {
-        name: "Explanation",
-        score: roundScore(explanationScore),
+        name: "Methods",
+        score: methodsScore,
         feedback:
-          explanationScore >= 8
-            ? "The explanation demonstrates the reasoning behind the design."
-            : "The explanation should provide more reasoning and design trade-offs.",
+          classesWithNoMethods.length > 0
+            ? "Some classes need clearer operations."
+            : "Classes contain meaningful operations.",
+      },
+      {
+        name: "Design Reasoning",
+        score: explanationScore,
+        feedback:
+          explanation.length >= 200
+            ? "The explanation provides useful reasoning."
+            : "Expand the explanation with decisions and trade-offs.",
       },
     ];
 
-    const overallScore = roundScore(
-      categories.reduce((sum, category) => sum + category.score, 0) /
-        categories.length,
+    const overallScore = clamp(
+      completenessScore * 0.2 +
+        responsibilityScore * 0.15 +
+        behaviorScore * 0.2 +
+        relationshipScore * 0.15 +
+        methodsScore * 0.15 +
+        explanationScore * 0.15,
     );
 
-    if (completenessScore < 8) {
-      suggestedImprovements.push(
-        "Review the problem requirements and ensure the important domain concepts are represented.",
-      );
-    }
-    if (relationshipScore < 8) {
-      suggestedImprovements.push(
-        "Review the relationships between classes and explicitly model important interactions.",
-      );
-    }
-    if (methodsScore < 8) {
-      suggestedImprovements.push(
-        "Add meaningful methods that demonstrate the behavior owned by each class.",
+    if (matchedRecommendedEntities.length > 0) {
+      strengths.push(
+        `The design also includes recommended concepts: ${matchedRecommendedEntities.join(
+          ", ",
+        )}.`,
       );
     }
 
-    const tradeoffs: string[] = [];
-    if (submission.classes.length <= 3) {
-      tradeoffs.push(
-        "A smaller class structure can be easier to understand, but may combine responsibilities as the system grows.",
-      );
-    }
-    if (submission.classes.length >= 8) {
-      tradeoffs.push(
-        "A highly decomposed design can improve separation of concerns, but excessive classes may increase complexity.",
-      );
-    }
-    if (submission.relationships.length === 0) {
-      tradeoffs.push(
-        "Keeping relationships implicit is simple initially, but makes collaboration between components harder to reason about.",
-      );
-    }
+    suggestedImprovements.push(
+      "Review each requirement and map it to one or more classes or behaviors.",
+    );
+
+    suggestedImprovements.push(
+      "Prefer focused responsibilities and meaningful collaboration over adding many classes.",
+    );
 
     return {
       overallScore,
@@ -286,9 +401,9 @@ export class RuleBasedEvaluator implements Evaluator {
       strengths,
       issues,
       tradeoffs,
-      suggestedImprovements: [...new Set(suggestedImprovements)],
+      suggestedImprovements,
       alternativeApproach:
-        "Consider separating core domain entities from orchestration/services so that each class has one primary responsibility.",
+        "For a more extensible design, consider using interfaces and composition around areas that are likely to change, while keeping the core domain objects focused.",
       evaluatorVersion: this.id,
     };
   }
