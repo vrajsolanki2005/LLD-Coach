@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Problem } from "../../types";
+import type { Problem } from "../../types";
 
 interface ProblemCardProps {
   problem: Problem;

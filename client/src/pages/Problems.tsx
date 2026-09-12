@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
-import { Problem } from "../types";
-import ProblemCard from "../components/ProblemCard";
+import type { Problem } from "../types";
+import ProblemCard from "../components/ProblemCard/ProblemCard";
 
 const Problems = () => {
   const [problems, setProblems] = useState<Problem[]>([]);

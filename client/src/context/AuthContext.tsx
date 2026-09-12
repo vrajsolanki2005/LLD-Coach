@@ -3,11 +3,11 @@ import {
   useContext,
   useEffect,
   useState,
-  ReactNode,
 } from "react";
+import type { ReactNode } from "react";
 
 import api from "../services/api";
-import { User } from "../types";
+import type { User } from "../types";
 
 interface AuthContextType {
   user: User | null;

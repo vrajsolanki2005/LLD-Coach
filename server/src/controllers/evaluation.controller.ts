@@ -1,6 +1,63 @@
 import { Response } from "express";
+import mongoose from "mongoose";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
+import { Attempt } from "../models/Attempt";
+import { Submission } from "../models/Submission";
+import { Evaluation } from "../models/Evaluation";
 import { getEvaluationBySubmission, createEvaluation } from "../services/evaluation.service";
+
+export const getAttemptEvaluation = async (
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ success: false, message: "Invalid attempt ID" });
+      return;
+    }
+
+    const attempt = await Attempt.findOne({
+      _id: id,
+      userId: req.user!.id,
+    });
+
+    if (!attempt) {
+      res.status(404).json({ success: false, message: "Attempt not found" });
+      return;
+    }
+
+    const submission = await Submission.findOne({ attemptId: attempt._id }).sort({
+      version: -1,
+    });
+
+    if (!submission) {
+      res.status(404).json({
+        success: false,
+        message: "No submission found for this attempt",
+      });
+      return;
+    }
+
+    const evaluation = await Evaluation.findOne({ submissionId: submission._id });
+
+    if (!evaluation) {
+      res.status(404).json({ success: false, message: "Evaluation not found" });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      attemptStatus: attempt.status,
+      submission,
+      evaluation,
+    });
+  } catch (error) {
+    console.error("Get evaluation error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch evaluation" });
+  }
+};
 
 export const getEvaluation = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {

@@ -7,7 +7,7 @@ import {
   submitAttempt,
 } from "../services/attempt.service";
 
-import { Attempt, ClassDefinition, Relationship } from "../types";
+import type { Attempt, ClassDefinition, Relationship } from "../types";
 
 const PracticeWorkspace = () => {
   const { id } = useParams();

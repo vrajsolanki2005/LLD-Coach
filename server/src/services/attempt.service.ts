@@ -46,3 +46,38 @@ export const getUserAttemptById = async (userId: string, attemptId: string) => {
     "title slug description difficulty requirements entities evaluationCriteria",
   );
 };
+
+export const createRetryAttempt = async (
+  userId: string,
+  previousAttemptId: string,
+) => {
+  if (!mongoose.Types.ObjectId.isValid(previousAttemptId)) {
+    throw new Error("INVALID_ATTEMPT_ID");
+  }
+
+  const previousAttempt = await Attempt.findOne({
+    _id: previousAttemptId,
+    userId,
+  });
+
+  if (!previousAttempt) {
+    throw new Error("ATTEMPT_NOT_FOUND");
+  }
+
+  const problem = await Problem.findById(previousAttempt.problemId);
+
+  if (!problem) {
+    throw new Error("PROBLEM_NOT_FOUND");
+  }
+
+  const newAttempt = await Attempt.create({
+    userId,
+    problemId: problem._id,
+    status: "DRAFT",
+  });
+
+  return Attempt.findById(newAttempt._id).populate(
+    "problemId",
+    "title slug description difficulty requirements entities evaluationCriteria",
+  );
+};

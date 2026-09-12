@@ -1,5 +1,5 @@
 import api from "./api";
-import { Attempt } from "../types";
+import type { Attempt } from "../types";
 
 export const getAttempt = async (attemptId: string): Promise<Attempt> => {
   const response = await api.get(`/attempts/${attemptId}`);
@@ -33,4 +33,20 @@ export const submitAttempt = async (
   const response = await api.post(`/attempts/${attemptId}/submit`, data);
 
   return response.data;
+};
+
+export const getMyAttempts = async (): Promise<Attempt[]> => {
+  const response = await api.get("/attempts");
+
+  return response.data.attempts;
+};
+
+export const retryAttempt = async (
+  attemptId: string
+): Promise<Attempt> => {
+  const response = await api.post(
+    `/attempts/${attemptId}/retry`
+  );
+
+  return response.data.attempt;
 };

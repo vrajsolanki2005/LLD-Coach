@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../../context/AuthContext";
 
 const Navbar = () => {
   const { user, logout } = useAuth();
@@ -16,7 +16,7 @@ const Navbar = () => {
         {user ? (
           <>
             <span className="user-name">Hi, {user.name}</span>
-
+            <Link to="/attempts">My Attempts</Link>
             <button className="logout-button" onClick={logout}>
               Logout
             </button>

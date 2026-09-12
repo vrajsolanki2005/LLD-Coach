@@ -47,3 +47,34 @@ export interface SubmissionData {
   explanation: string;
   code?: string;
 }
+
+export type EvaluationStatus = "PENDING" | "COMPLETED" | "FAILED";
+
+export interface EvaluationCategory {
+  name: string;
+  score: number;
+  feedback: string;
+}
+
+export interface EvaluationIssue {
+  severity: "low" | "medium" | "high";
+  title: string;
+  explanation: string;
+  suggestion: string;
+}
+
+export interface Evaluation {
+  _id: string;
+  submissionId: string;
+  status: EvaluationStatus;
+  overallScore?: number;
+  categories: EvaluationCategory[];
+  strengths: string[];
+  issues: EvaluationIssue[];
+  tradeoffs: string[];
+  suggestedImprovements: string[];
+  alternativeApproach?: string;
+  evaluatorVersion: string;
+  createdAt: string;
+  updatedAt: string;
+}
