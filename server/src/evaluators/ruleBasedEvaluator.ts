@@ -5,12 +5,22 @@ import { ISubmission } from "../models/Submission";
 const normalize = (value: string): string =>
   value.toLowerCase().replace(/[\s_-]/g, "");
 
-const containsKeyword = (text: string, keywords: string[]): boolean => {
-  const normalizedText = text.toLowerCase();
+const tokenize = (value: string): string[] => {
+  return value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+};
 
-  return keywords.some((keyword) =>
-    normalizedText.includes(keyword.toLowerCase()),
-  );
+const containsKeyword = (text: string, keywords: string[]): boolean => {
+  const tokens = new Set(tokenize(text));
+
+  return keywords.some((keyword) => {
+    const keywordTokens = tokenize(keyword);
+
+    return keywordTokens.every((token) => tokens.has(token));
+  });
 };
 
 const clamp = (value: number): number =>
@@ -32,11 +42,14 @@ export class RuleBasedEvaluator implements Evaluator {
 
     const allMethods = classes.flatMap((item) => item.methods || []);
 
-    const designText = [
+    const structuralDesignText = [
       ...classNames,
       ...classes.map((item) => item.responsibility),
       ...allMethods,
       ...relationships.map((item) => `${item.from} ${item.to} ${item.type}`),
+    ].join(" ");
+
+    const reasoningText = [
       submission.explanation || "",
       submission.code || "",
     ].join(" ");
@@ -46,7 +59,6 @@ export class RuleBasedEvaluator implements Evaluator {
     const tradeoffs: string[] = [];
     const suggestedImprovements: string[] = [];
 
-    
     const requiredEntities =
       problem.evaluationConfig?.requiredEntities || problem.entities || [];
 
@@ -77,7 +89,6 @@ export class RuleBasedEvaluator implements Evaluator {
       );
     }
 
-    
     const classesWithoutResponsibilities = classes.filter(
       (item) => !item.responsibility?.trim(),
     );
@@ -115,15 +126,12 @@ export class RuleBasedEvaluator implements Evaluator {
       );
     }
 
-   
-    
     const behaviors = problem.evaluationConfig?.requiredBehaviors || [];
 
     let coveredBehaviors = 0;
 
     for (const behavior of behaviors) {
-      const covered = containsKeyword(designText, behavior.keywords);
-
+      const covered = containsKeyword(structuralDesignText, behavior.keywords);
       if (covered) {
         coveredBehaviors++;
 
@@ -140,7 +148,6 @@ export class RuleBasedEvaluator implements Evaluator {
       }
     }
 
-    
     const classesWithNoMethods = classes.filter(
       (item) => !item.methods || item.methods.length === 0,
     );
@@ -163,7 +170,6 @@ export class RuleBasedEvaluator implements Evaluator {
       );
     }
 
-    
     const invalidRelationships = relationships.filter(
       (relationship) =>
         !classNames.includes(relationship.from) ||
@@ -196,7 +202,6 @@ export class RuleBasedEvaluator implements Evaluator {
       );
     }
 
-    
     const recommendedConcepts =
       problem.evaluationConfig?.recommendedConcepts || [];
 
@@ -211,7 +216,7 @@ export class RuleBasedEvaluator implements Evaluator {
     ];
 
     const abstractionDetected = abstractionKeywords.some((keyword) =>
-      designText.toLowerCase().includes(keyword),
+      structuralDesignText.toLowerCase().includes(keyword),
     );
 
     if (
@@ -232,7 +237,6 @@ export class RuleBasedEvaluator implements Evaluator {
       });
     }
 
-    
     const explanation = submission.explanation?.trim() || "";
 
     const reasoningKeywords = [
@@ -280,7 +284,6 @@ export class RuleBasedEvaluator implements Evaluator {
       );
     }
 
-    
     const completenessScore =
       requiredEntities.length === 0
         ? 10
